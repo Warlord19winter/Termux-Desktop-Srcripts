@@ -11,7 +11,7 @@
 set -eu
 
 VERSION="0.8.136"
-URL="https://github.com/xemu-project/xemu/releases/download/v${VERSION}/xemu-v${VERSION}-aarch64.AppImage"
+URL="https://github.com/xemu-project/xemu/releases/download/v${VERSION}/xemu-${VERSION}-aarch64.AppImage"
 DEST="$HOME/games/xemu"
 WORK="$HOME/.cache/xemu-install"
 
