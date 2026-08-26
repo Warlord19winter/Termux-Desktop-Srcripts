@@ -1,8 +1,10 @@
 # Termux-Desktop-Srcripts
 
-===============WARNING===============
+===============WARNING==============
 
 THIS IS ONLY FOR GLIBC BUILD
 
-=====================================
+====================================
+
+
 Desktop, Game, Code and 3d editing environment
