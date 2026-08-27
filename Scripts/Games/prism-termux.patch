@@ -1,0 +1,99 @@
+diff --git a/launcher/Application.cpp b/launcher/Application.cpp
+index 4e24077..976ea13 100644
+--- a/launcher/Application.cpp
++++ b/launcher/Application.cpp
+@@ -128,7 +128,7 @@
+ #include <stdlib.h>
+ #include "SysInfo.h"
+ 
+-#ifdef Q_OS_LINUX
++#if defined(LAUNCHER_USE_GAMEMODE)
+ #include <dlfcn.h>
+ #include "LibraryUtils.h"
+ #include "gamemode_client.h"
+@@ -1857,7 +1857,7 @@ void Application::updateCapabilities()
+     if (!getFlameAPIKey().isEmpty())
+         m_capabilities |= SupportsFlame;
+ 
+-#ifdef Q_OS_LINUX
++#if defined(LAUNCHER_USE_GAMEMODE)
+     if (gamemode_query_status() >= 0)
+         m_capabilities |= SupportsGameMode;
+ 
+@@ -1868,7 +1868,7 @@ void Application::updateCapabilities()
+ 
+ void Application::detectLibraries()
+ {
+-#ifdef Q_OS_LINUX
++#if defined(LAUNCHER_USE_GAMEMODE)
+     m_detectedGLFWPath = LibraryUtils::find(BuildConfig.GLFW_LIBRARY_NAME);
+     m_detectedOpenALPath = LibraryUtils::find(BuildConfig.OPENAL_LIBRARY_NAME);
+     m_detectedSDLPath = LibraryUtils::find(BuildConfig.SDL_LIBRARY_NAME);
+diff --git a/launcher/CMakeLists.txt b/launcher/CMakeLists.txt
+index 5f24800..cbc23e5 100644
+--- a/launcher/CMakeLists.txt
++++ b/launcher/CMakeLists.txt
+@@ -1354,7 +1354,6 @@ if(DEFINED Launcher_APP_BINARY_DEFS)
+ endif()
+ 
+ install(TARGETS ${Launcher_Name}
+-    RUNTIME_DEPENDENCY_SET LAUNCHER_DEPENDENCY_SET
+     BUNDLE DESTINATION "." COMPONENT Runtime
+     LIBRARY DESTINATION ${LIBRARY_DEST_DIR} COMPONENT Runtime
+     RUNTIME DESTINATION ${BINARY_DEST_DIR} COMPONENT Runtime
+@@ -1529,7 +1528,6 @@ if(WIN32 OR (UNIX AND APPLE))
+ 
+     # Bundle our linked dependencies
+     install(
+-        RUNTIME_DEPENDENCY_SET LAUNCHER_DEPENDENCY_SET
+         COMPONENT bundle
+         DIRECTORIES
+             ${CMAKE_SYSTEM_LIBRARY_PATH}
+diff --git a/launcher/minecraft/launch/LauncherPartLaunch.cpp b/launcher/minecraft/launch/LauncherPartLaunch.cpp
+index e4d3ec1..d5ead56 100644
+--- a/launcher/minecraft/launch/LauncherPartLaunch.cpp
++++ b/launcher/minecraft/launch/LauncherPartLaunch.cpp
+@@ -44,7 +44,7 @@
+ #include "launch/LaunchTask.h"
+ #include "minecraft/MinecraftInstance.h"
+ 
+-#ifdef Q_OS_LINUX
++#if defined(LAUNCHER_USE_GAMEMODE)
+ #include "gamemode_client.h"
+ #endif
+ 
+@@ -149,7 +149,7 @@ void LauncherPartLaunch::executeTask()
+         m_process.start(javaPath, args);
+     }
+ 
+-#ifdef Q_OS_LINUX
++#if defined(LAUNCHER_USE_GAMEMODE)
+     if (instance->settings()->get("EnableFeralGamemode").toBool() && APPLICATION->capabilities() & Application::SupportsGameMode) {
+         auto pid = m_process.processId();
+         if (pid) {
+diff --git a/libraries/javacheck/CMakeLists.txt b/libraries/javacheck/CMakeLists.txt
+index b9bcb12..a98b503 100644
+--- a/libraries/javacheck/CMakeLists.txt
++++ b/libraries/javacheck/CMakeLists.txt
+@@ -4,7 +4,7 @@ find_package(Java 1.7 REQUIRED COMPONENTS Development)
+ 
+ include(UseJava)
+ set(CMAKE_JAVA_JAR_ENTRY_POINT JavaCheck)
+-set(CMAKE_JAVA_COMPILE_FLAGS -target 7 -source 7 -Xlint:deprecation -Xlint:unchecked)
++set(CMAKE_JAVA_COMPILE_FLAGS -target 8 -source 8 -Xlint:deprecation -Xlint:unchecked)
+ 
+ set(SRC
+     JavaCheck.java
+diff --git a/libraries/launcher/CMakeLists.txt b/libraries/launcher/CMakeLists.txt
+index dfc4ebb..5cb9999 100644
+--- a/libraries/launcher/CMakeLists.txt
++++ b/libraries/launcher/CMakeLists.txt
+@@ -4,7 +4,7 @@ find_package(Java 1.7 REQUIRED COMPONENTS Development)
+ 
+ include(UseJava)
+ set(CMAKE_JAVA_JAR_ENTRY_POINT org.prismlauncher.EntryPoint)
+-set(CMAKE_JAVA_COMPILE_FLAGS -target 7 -source 7)
++set(CMAKE_JAVA_COMPILE_FLAGS -target 8 -source 8)
+ 
+ set(SRC
+     org/prismlauncher/EntryPoint.java
