@@ -1,0 +1,321 @@
+diff --git a/3rdparty/hidapi/CMakeLists.txt b/3rdparty/hidapi/CMakeLists.txt
+index cdaac856b..c8390c6b6 100644
+--- a/3rdparty/hidapi/CMakeLists.txt
++++ b/3rdparty/hidapi/CMakeLists.txt
+@@ -1,10 +1,10 @@
+ # hidapi
+ if(USE_SYSTEM_HIDAPI)
+ 	message(STATUS "RPCS3: using shared hidapi")
+-	pkg_check_modules(hidapi-hidraw REQUIRED IMPORTED_TARGET hidapi-hidraw)
++	pkg_check_modules(hidapi-libusb REQUIRED IMPORTED_TARGET hidapi-libusb)
+ 	add_library(3rdparty_hidapi INTERFACE)
+-	target_link_libraries(3rdparty_hidapi INTERFACE PkgConfig::hidapi-hidraw)
+-	target_include_directories(3rdparty_hidapi SYSTEM INTERFACE PkgConfig::hidapi-hidraw)
++	target_link_libraries(3rdparty_hidapi INTERFACE PkgConfig::hidapi-libusb)
++	target_include_directories(3rdparty_hidapi SYSTEM INTERFACE PkgConfig::hidapi-libusb)
+ else()
+ 	set(BUILD_SHARED_LIBS FALSE CACHE BOOL "Don't build shared libs")
+ 	set(HIDAPI_INSTALL_TARGETS FALSE CACHE BOOL "Don't install anything")
+@@ -19,7 +19,7 @@ else()
+ 	if(APPLE)
+ 		target_link_libraries(3rdparty_hidapi INTERFACE hidapi_darwin "-framework CoreFoundation" "-framework IOKit")
+ 	elseif(CMAKE_SYSTEM MATCHES "Linux")
+-		target_link_libraries(3rdparty_hidapi INTERFACE hidapi-hidraw udev)
++		target_link_libraries(3rdparty_hidapi INTERFACE hidapi-libusb udev)
+ 	elseif(WIN32)
+ 		target_link_libraries(3rdparty_hidapi INTERFACE hidapi::hidapi hidapi::include Shlwapi.lib)
+ 	elseif(ANDROID)
+diff --git a/Utilities/Thread.cpp b/Utilities/Thread.cpp
+index 59f1cc9da..d06bced9f 100644
+--- a/Utilities/Thread.cpp
++++ b/Utilities/Thread.cpp
+@@ -2773,7 +2773,11 @@ void thread_base::start()
+ 	ensure(pthread_create(&thread_id, &attrs, entry_point, this) == 0);
+ #else
+ 	pthread_t thread_id{};
+-	ensure(pthread_create(&thread_id, nullptr, entry_point, this) == 0);
++	pthread_attr_t attrs;
++	pthread_attr_init(&attrs);
++	pthread_attr_setstacksize(&attrs, 0x800000);
++	ensure(pthread_create(&thread_id, &attrs, entry_point, this) == 0);
++	pthread_attr_destroy(&attrs);
+ #endif
+ 
+ #ifndef _WIN32
+@@ -2800,7 +2804,7 @@ void thread_base::initialize(void (*error_cb)())
+ #elif defined(ANDROID)
+ 	const u64 new_tid = pthread_self();
+ #else
+-	const u64 new_tid = reinterpret_cast<u64>(pthread_self());
++	const u64 new_tid = static_cast<u64>(pthread_self());
+ #endif
+ 
+ 	if (!m_thread && !m_thread.compare_and_swap_test(0, new_tid))
+@@ -3254,7 +3258,7 @@ thread_base::~thread_base() noexcept
+ #elif defined(ANDROID)
+ 		pthread_join(m_thread.load(), nullptr);
+ #else
+-		pthread_join(reinterpret_cast<pthread_t>(m_thread.load()), nullptr);
++		pthread_join(static_cast<pthread_t>(m_thread.load()), nullptr);
+ #endif
+ 	}
+ }
+@@ -3330,7 +3334,7 @@ u64 thread_base::get_cycles()
+ #ifdef ANDROID
+ 	pthread_t thread_id = handle;
+ #else
+-	pthread_t thread_id = reinterpret_cast<pthread_t>(handle);
++	pthread_t thread_id = static_cast<pthread_t>(handle);
+ #endif
+ 	if (!pthread_getcpuclockid(thread_id, &_clock) && !clock_gettime(_clock, &thread_time))
+ 	{
+@@ -3918,7 +3922,7 @@ void thread_ctrl::set_thread_affinity_mask(u64 mask)
+ 		}
+ 	}
+ 
+-	if (int err = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cs))
++	if (int err = sched_setaffinity(0, sizeof(cpu_set_t), &cs))
+ 	{
+ 		sig_log.error("Failed to set thread affinity 0x%x: error %d.", mask, err);
+ 	}
+@@ -3946,7 +3950,7 @@ u64 thread_ctrl::get_thread_affinity_mask()
+ 	cpu_set_t cs;
+ 	CPU_ZERO(&cs);
+ 
+-	if (int err = pthread_getaffinity_np(pthread_self(), sizeof(cpu_set_t), &cs))
++	if (int err = sched_getaffinity(0, sizeof(cpu_set_t), &cs))
+ 	{
+ 		sig_log.error("Failed to get thread affinity mask: error %d.", err);
+ 		return 0;
+diff --git a/rpcs3/Emu/RSX/Common/aligned_malloc.hpp b/rpcs3/Emu/RSX/Common/aligned_malloc.hpp
+index 2ca59c3cf..182f2cbdd 100644
+--- a/rpcs3/Emu/RSX/Common/aligned_malloc.hpp
++++ b/rpcs3/Emu/RSX/Common/aligned_malloc.hpp
+@@ -1,88 +1,99 @@
+-#pragma once
+-
+-#include <cstdlib>
+-
+-namespace rsx
+-{
+-	namespace aligned_allocator
+-	{
+-		template <size_t Align>
+-			requires (Align != 0) && ((Align& (Align - 1)) == 0)
+-		size_t align_up(size_t size)
+-		{
+-			return (size + (Align - 1)) & ~(Align - 1);
+-		}
+-
+-		template <size_t Align>
+-			requires (Align != 0) && ((Align& (Align - 1)) == 0)
+-		void* malloc(size_t size)
+-		{
+-#if defined(_WIN32)
+-			return _aligned_malloc(size, Align);
+-#elif defined(__APPLE__)
+-			constexpr size_t NativeAlign = std::max(Align, sizeof(void*));
+-			return std::aligned_alloc(NativeAlign, align_up<NativeAlign>(size));
+-#else
+-			return std::aligned_alloc(Align, align_up<Align>(size));
+-#endif
+-		}
+-
+-		template <size_t Align>
+-			requires (Align != 0) && ((Align& (Align - 1)) == 0)
+-		void* realloc(void* prev_ptr, [[maybe_unused]] size_t prev_size, size_t new_size)
+-		{
+-			if (align_up<Align>(prev_size) >= new_size)
+-			{
+-				return prev_ptr;
+-			}
+-
+-			ensure(reinterpret_cast<usz>(prev_ptr) % Align == 0, "Pointer not aligned to Align");
+-#if defined(_WIN32)
+-			return _aligned_realloc(prev_ptr, new_size, Align);
+-#else
+-#if defined(__APPLE__)
+-			constexpr size_t NativeAlign = std::max(Align, sizeof(void*));
+-			void* ret = std::aligned_alloc(NativeAlign, align_up<NativeAlign>(new_size));
+-#else
+-			void* ret = std::aligned_alloc(Align, align_up<Align>(new_size));
+-#endif
+-			std::memcpy(ret, prev_ptr, std::min(prev_size, new_size));
+-			std::free(prev_ptr);
+-			return ret;
+-#endif
+-		}
+-
+-		static inline void free(void* ptr)
+-		{
+-#ifdef _WIN32
+-			_aligned_free(ptr);
+-#else
+-			std::free(ptr);
+-#endif
+-		}
+-	}
+-
+-	template <typename T, int Alignment = sizeof(T)>
+-	class aligned_pointer_t
+-	{
+-	public:
+-		aligned_pointer_t(size_t size)
+-		{
+-			m_ptr = aligned_allocator::malloc<Alignment>(size);
+-		}
+-
+-		virtual ~aligned_pointer_t()
+-		{
+-			aligned_allocator::free(m_ptr);
+-		}
+-
+-		T* data() const { return m_ptr; }
+-
+-		T& operator * () const { return *m_ptr; }
+-
+-		T* operator -> () const { return m_ptr; }
+-
+-	private:
+-		T* m_ptr;
+-	};
+-}
++#pragma once
++
++#include <cstdlib>
++
++namespace rsx
++{
++	namespace aligned_allocator
++	{
++		template <size_t Align>
++			requires (Align != 0) && ((Align& (Align - 1)) == 0)
++		size_t align_up(size_t size)
++		{
++			return (size + (Align - 1)) & ~(Align - 1);
++		}
++
++		template <size_t Align>
++			requires (Align != 0) && ((Align& (Align - 1)) == 0)
++		void* malloc(size_t size)
++		{
++#if defined(_WIN32)
++			return _aligned_malloc(size, Align);
++#elif defined(__APPLE__)
++			constexpr size_t NativeAlign = std::max(Align, sizeof(void*));
++			return std::aligned_alloc(NativeAlign, align_up<NativeAlign>(size));
++#elif defined(__ANDROID__)
++			void* ptr = nullptr;
++			constexpr size_t NativeAlign = std::max(Align, sizeof(void*));
++			if (posix_memalign(&ptr, NativeAlign, align_up<NativeAlign>(size)) != 0)
++				return nullptr;
++			return ptr;
++#else
++			return std::aligned_alloc(Align, align_up<Align>(size));
++#endif
++		}
++
++		template <size_t Align>
++			requires (Align != 0) && ((Align& (Align - 1)) == 0)
++		void* realloc(void* prev_ptr, [[maybe_unused]] size_t prev_size, size_t new_size)
++		{
++			if (align_up<Align>(prev_size) >= new_size)
++			{
++				return prev_ptr;
++			}
++
++			ensure(reinterpret_cast<usz>(prev_ptr) % Align == 0, "Pointer not aligned to Align");
++#if defined(_WIN32)
++			return _aligned_realloc(prev_ptr, new_size, Align);
++#else
++#if defined(__APPLE__)
++			constexpr size_t NativeAlign = std::max(Align, sizeof(void*));
++			void* ret = std::aligned_alloc(NativeAlign, align_up<NativeAlign>(new_size));
++#elif defined(__ANDROID__)
++			void* ret = nullptr;
++			constexpr size_t NativeAlign2 = std::max(Align, sizeof(void*));
++			if (posix_memalign(&ret, NativeAlign2, align_up<NativeAlign2>(new_size)) != 0)
++				ret = nullptr;
++#else
++			void* ret = std::aligned_alloc(Align, align_up<Align>(new_size));
++#endif
++			std::memcpy(ret, prev_ptr, std::min(prev_size, new_size));
++			std::free(prev_ptr);
++			return ret;
++#endif
++		}
++
++		static inline void free(void* ptr)
++		{
++#ifdef _WIN32
++			_aligned_free(ptr);
++#else
++			std::free(ptr);
++#endif
++		}
++	}
++
++	template <typename T, int Alignment = sizeof(T)>
++	class aligned_pointer_t
++	{
++	public:
++		aligned_pointer_t(size_t size)
++		{
++			m_ptr = aligned_allocator::malloc<Alignment>(size);
++		}
++
++		virtual ~aligned_pointer_t()
++		{
++			aligned_allocator::free(m_ptr);
++		}
++
++		T* data() const { return m_ptr; }
++
++		T& operator * () const { return *m_ptr; }
++
++		T* operator -> () const { return m_ptr; }
++
++	private:
++		T* m_ptr;
++	};
++}
+diff --git a/rpcs3/Loader/ISO.cpp b/rpcs3/Loader/ISO.cpp
+index 43d5b9d93..bd4daaa3e 100644
+--- a/rpcs3/Loader/ISO.cpp
++++ b/rpcs3/Loader/ISO.cpp
+@@ -38,6 +38,9 @@ static void* get_aligned_buf()
+ 			// IMPORTANT NOTE: It must be aligned (probably enough on multiple of 4) to support raw device, otherwise any read from file will fail
+ #if defined(_WIN32)
+ 			buf = _aligned_malloc(ISO_SECTOR_SIZE, ISO_SECTOR_SIZE * 2);
++#elif defined(__ANDROID__)
++			if (posix_memalign(&buf, ISO_SECTOR_SIZE * 2, ISO_SECTOR_SIZE) != 0)
++				buf = nullptr;
+ #else
+ 			buf = std::aligned_alloc(ISO_SECTOR_SIZE * 2, ISO_SECTOR_SIZE);
+ #endif
+diff --git a/rpcs3/util/atomic.cpp b/rpcs3/util/atomic.cpp
+index 6a8ae01cc..c556b7a3d 100644
+--- a/rpcs3/util/atomic.cpp
++++ b/rpcs3/util/atomic.cpp
+@@ -33,7 +33,7 @@ static bool has_waitv()
+ {
+ 	static const bool s_has_waitv = []
+ 	{
+-#ifndef ANDROID
++#if !defined(ANDROID) && !defined(__ANDROID__)
+ 		// FIXME: it produces SIGSYS signal
+ 		syscall(SYS_futex_waitv, 0, 0, 0, 0, 0);
+ 		return errno != ENOSYS;
+diff --git a/rpcs3/util/vm_native.cpp b/rpcs3/util/vm_native.cpp
+index 5b5c7746f..453fd59cd 100644
+--- a/rpcs3/util/vm_native.cpp
++++ b/rpcs3/util/vm_native.cpp
+@@ -702,7 +702,7 @@ namespace utils
+ #else
+ 
+ #ifdef __linux__
+-#ifdef ANDROID
++#if defined(ANDROID) || defined(__ANDROID__)
+ 		if constexpr (constexpr char c = '?')
+ #else
+ 		if (const char c = fs::file("/proc/sys/vm/overcommit_memory").read<char>(); c == '0' || c == '1')

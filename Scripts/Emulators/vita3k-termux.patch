@@ -1,0 +1,177 @@
+diff --git a/external/VulkanMemoryAllocator-Hpp b/external/VulkanMemoryAllocator-Hpp
+--- a/external/VulkanMemoryAllocator-Hpp
++++ b/external/VulkanMemoryAllocator-Hpp
+@@ -1 +1 @@
+-Subproject commit 3843082eaa6a6f67e6780715fcd602fc81942c9c
++Subproject commit 3843082eaa6a6f67e6780715fcd602fc81942c9c-dirty
+diff --git a/external/ffmpeg b/external/ffmpeg
+--- a/external/ffmpeg
++++ b/external/ffmpeg
+@@ -1 +1 @@
+-Subproject commit 02f4f2691b0efffff8923235baf146a87fc37263
++Subproject commit 02f4f2691b0efffff8923235baf146a87fc37263-dirty
+diff --git a/external/nativefiledialog-extended b/external/nativefiledialog-extended
+--- a/external/nativefiledialog-extended
++++ b/external/nativefiledialog-extended
+@@ -1 +1 @@
+-Subproject commit fc168e8605bfa51aaec22ab0c4e46b9de665a437
++Subproject commit fc168e8605bfa51aaec22ab0c4e46b9de665a437-dirty
+diff --git a/external/sdl b/external/sdl
+--- a/external/sdl
++++ b/external/sdl
+@@ -1 +1 @@
+-Subproject commit f5e5f6588921eed3d7d048ce43d9eb1ff0da0ffc
++Subproject commit f5e5f6588921eed3d7d048ce43d9eb1ff0da0ffc-dirty
+diff --git a/vita3k/app/src/app_init.cpp b/vita3k/app/src/app_init.cpp
+index c5d693df..cb2289ad 100644
+--- a/vita3k/app/src/app_init.cpp
++++ b/vita3k/app/src/app_init.cpp
+@@ -244,7 +244,7 @@ void set_current_config(EmuEnvState &emuenv, const std::string &app_path) {
+ // Returns true if in portable mode, false otherwise
+ bool init_paths(Root &root_paths) {
+     bool portable = false;
+-#ifdef __ANDROID__
++#if 0 /* Termux: use the Linux path layout, not the APK one */
+     fs::path internal_storage_path = fs::path(SDL_GetAndroidExternalStoragePath()) / "";
+     fs::path vita_storage_path = internal_storage_path / "vita/";
+ 
+diff --git a/vita3k/codec/src/mp3.cpp b/vita3k/codec/src/mp3.cpp
+index 28f485f6..afc45be7 100644
+--- a/vita3k/codec/src/mp3.cpp
++++ b/vita3k/codec/src/mp3.cpp
+@@ -202,8 +202,8 @@ Mp3DecoderState::Mp3DecoderState(uint32_t channels) {
+ }
+ 
+ Mp3DecoderState::~Mp3DecoderState() {
+-    avcodec_close(context);
+-    av_free(context);
++    // FFmpeg 8 removed avcodec_close; free_context closes and frees.
++    avcodec_free_context(&context);
+ 
+     context = nullptr;
+ }
+diff --git a/vita3k/renderer/src/texture/replacement.cpp b/vita3k/renderer/src/texture/replacement.cpp
+index 52cb2a7b..a16d91b8 100644
+--- a/vita3k/renderer/src/texture/replacement.cpp
++++ b/vita3k/renderer/src/texture/replacement.cpp
+@@ -513,7 +513,7 @@ bool TextureCache::import_configure_texture() {
+             LOG_ERROR_ONCE("BCn textures are not supported by this device");
+ #ifdef __ANDROID__
+             // this issue is most likely to happen on android
+-            SDL_ShowAndroidToast("BCn textures are not supported by this device!", 1, -1, 0, 0);
++            LOG_WARN("BCn textures are not supported by this device!");
+ #endif
+             return false;
+         }
+diff --git a/vita3k/renderer/src/vulkan/renderer.cpp b/vita3k/renderer/src/vulkan/renderer.cpp
+index f4b6c440..52fcfb2f 100644
+--- a/vita3k/renderer/src/vulkan/renderer.cpp
++++ b/vita3k/renderer/src/vulkan/renderer.cpp
+@@ -687,8 +687,8 @@ bool VKState::create(std::unique_ptr<renderer::State> &state, const Config &conf
+ #endif
+ 
+ #ifdef __ANDROID__
+-        support_android_buffer_import &= SDL_GetAndroidSDKVersion() >= 26;
+-        support_unix_fd_import &= SDL_GetAndroidSDKVersion() >= 26;
++        support_android_buffer_import &= __ANDROID_API__ >= 26;
++        support_unix_fd_import &= __ANDROID_API__ >= 26;
+ #endif
+ 
+         // Find which memory mapping methods are supported by the GPU
+@@ -1645,8 +1645,8 @@ static int get_supported_mapping_methods_mask(const vk::PhysicalDevice &gpu, con
+         support_memory_mapping &= support_standard_layout;
+ 
+ #ifdef __ANDROID__
+-        support_android_buffer_import &= SDL_GetAndroidSDKVersion() >= 26;
+-        support_unix_fd_import &= SDL_GetAndroidSDKVersion() >= 26;
++        support_android_buffer_import &= __ANDROID_API__ >= 26;
++        support_unix_fd_import &= __ANDROID_API__ >= 26;
+ #endif
+ 
+         if (support_memory_mapping) {
+diff --git a/vita3k/renderer/src/vulkan/screen_renderer.cpp b/vita3k/renderer/src/vulkan/screen_renderer.cpp
+index 5cb0277e..b59ca3fc 100644
+--- a/vita3k/renderer/src/vulkan/screen_renderer.cpp
++++ b/vita3k/renderer/src/vulkan/screen_renderer.cpp
+@@ -30,13 +30,18 @@
+ #include <vkutil/native_surface.h>
+ #include <vulkan/vulkan_metal.h>
+ #elif defined(__linux__) && !defined(__ANDROID__)
+-#if defined(HAVE_X11)
++#if 1
+ #include <vulkan/vulkan_xlib.h>
++// Xlib defines these as macros; they collide with C++ identifiers.
++#undef Success
++#undef Status
++#undef None
++#undef Bool
+ #if defined(VK_USE_PLATFORM_XCB_KHR)
+ #include <vulkan/vulkan_xcb.h>
+ #endif
+ #endif
+-#if defined(HAVE_WAYLAND)
++#if 0
+ #include <vulkan/vulkan_wayland.h>
+ #endif
+ #endif
+@@ -127,7 +132,7 @@ bool ScreenRenderer::create() {
+         surface_created = true;
+ #endif
+     } else if (const auto *handle = std::get_if<renderer::WaylandDisplayHandle>(&display_handle)) {
+-#if defined(HAVE_WAYLAND)
++#if 0
+         vk::WaylandSurfaceCreateInfoKHR create_info{};
+         create_info.display = static_cast<struct wl_display *>(handle->display);
+         create_info.surface = static_cast<struct wl_surface *>(handle->surface);
+@@ -135,7 +140,7 @@ bool ScreenRenderer::create() {
+         surface_created = true;
+ #endif
+     } else if (const auto *handle = std::get_if<renderer::X11DisplayHandle>(&display_handle)) {
+-#if defined(HAVE_X11)
++#if 1
+         if (state.linux_surface_type == LinuxSurfaceType::Xlib && handle->display) {
+             vk::XlibSurfaceCreateInfoKHR create_info{};
+             create_info.dpy = static_cast<Display *>(handle->display);
+diff --git a/vita3k/shader/include/shader/usse_types.h b/vita3k/shader/include/shader/usse_types.h
+index e31942f2..5a647cef 100644
+--- a/vita3k/shader/include/shader/usse_types.h
++++ b/vita3k/shader/include/shader/usse_types.h
+@@ -36,6 +36,12 @@ namespace shader::usse {
+ 
+ enum class Opcode {
+ #define OPCODE(n) n,
++#ifdef VMIN
++#undef VMIN  /* Bionic termbits.h defines this; collides with the opcode name */
++#endif
++#ifdef VMAX
++#undef VMAX
++#endif
+ #include "usse_opcodes.inc"
+ #undef OPCODE
+ };
+diff --git a/vita3k/util/include/util/exit_code.h b/vita3k/util/include/util/exit_code.h
+index 3a93f90e..b99ab1e8 100644
+--- a/vita3k/util/include/util/exit_code.h
++++ b/vita3k/util/include/util/exit_code.h
+@@ -17,6 +17,11 @@
+ 
+ #pragma once
+ 
++// X11's X.h defines Success as a macro, which collides with this enum.
++#ifdef Success
++#undef Success
++#endif
++
+ enum ExitCode {
+     Success = 0,
+     QuitRequested,
+diff --git a/vita3k/util/src/android_driver.cpp b/vita3k/util/src/android_driver.cpp
+index 2eae0787..4aaae358 100644
+--- a/vita3k/util/src/android_driver.cpp
++++ b/vita3k/util/src/android_driver.cpp
+@@ -1,4 +1,4 @@
+-#ifdef __ANDROID__
++#if 0 /* Termux: Linux build, no JNI available */
+ 
+ #include <util/android_driver.h>
+ 
