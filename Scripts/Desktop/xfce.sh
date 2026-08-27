@@ -6,8 +6,12 @@
 
 set -eu
 
-echo "==> Adding the x11 repository"
-pkg install -y x11-repo
+echo "==> Adding the extra repositories"
+# glibc-repo is only a repository definition, a few KB. Adding it here
+# means the scripts that need the glibc bridge can install it later
+# without a separate step. The bridge itself is about 2 GB and is left
+# to Programs/glibc.sh, since the native emulators do not need it.
+pkg install -y x11-repo glibc-repo
 
 echo "==> Installing XFCE and Termux:X11"
 pkg install -y termux-x11-nightly xfce4 xfce4-terminal dbus
