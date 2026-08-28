@@ -50,6 +50,7 @@ tome|Tales of Maj'Eyal|games/tome/run.sh|bash setup.sh install Games tome
 openra-ra|OpenRA: Red Alert|games/openra-ra/run.sh|bash setup.sh install Games openra-ra
 openra-cnc|OpenRA: Tiberian Dawn|games/openra-cnc/run.sh|bash setup.sh install Games openra-cnc
 openra-d2k|OpenRA: Dune 2000|games/openra-d2k/run.sh|bash setup.sh install Games openra-d2k
+dhewm3|Doom 3 (dhewm3)|games/dhewm3/run.sh|bash setup.sh install Games dhewm3
 blender|Blender 5.2|games/blender/run.sh|bash setup.sh install Programs blender
 xemu|xemu (Original Xbox)|games/xemu/run.sh|bash setup.sh install Emulators xemu
 pcsx2|PCSX2 (PS2)|games/pcsx2/run.sh|bash setup.sh install Emulators pcsx2
