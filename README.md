@@ -71,7 +71,7 @@ bash setup.sh install Games factorio ~/storage/downloads/factorio_installer.sh
 | `retroarch` | many, via cores |
 
 **Games** — Factorio, Terraria, Starbound, Vintage Story, Morrowind via
-OpenMW, Mindustry, OpenRA, Minecraft via Prism Launcher.
+OpenMW, Mindustry, doom3 via Dhewm3, OpenRA, Minecraft via Prism Launcher.
 
 **Programs** — Blender, BCU, the launchers, the graphical installer menu.
 
