@@ -96,7 +96,11 @@ cat > "$DEST/run.sh" << EOF
 
 export DISPLAY=\${DISPLAY:-:0}
 cd "$SRC/build"
-exec ./dhewm3 +set fs_basepath "$GAMEDIR" "\$@"
+# Soft particles cause black flickering artifacts under Termux:X11 -
+# they sample the depth buffer, and Zink on Turnip gets that wrong.
+# Confirmed on two Adreno 750 devices. Post-processing is fine; it is
+# specifically this. Pass +set r_useSoftParticles 1 to turn them back on.
+exec ./dhewm3 +set fs_basepath "$GAMEDIR" +set r_useSoftParticles 0 "\$@"
 EOF
 chmod +x "$DEST/run.sh"
 
