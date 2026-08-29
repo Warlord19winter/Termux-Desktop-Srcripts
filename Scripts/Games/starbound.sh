@@ -5,20 +5,32 @@
 #
 # Starbound is x86_64, so it runs under box64 with the glibc bridge.
 #
-# It also writes temp files to /tmp, which Android does not allow. The fix
-# is a small LD_PRELOAD shim that intercepts mkstemp, unlink and remove,
-# and rewrites any /tmp path to a writable directory. The shim is compiled
-# here for x86_64, because box64 loads it into the emulated process rather
-# than the host one.
+# TWO THINGS MAKE THIS MORE INVOLVED THAN IT LOOKS
 #
-# The shim deliberately avoids libc headers - it declares the handful of
-# functions it needs itself - so it builds with Termux's clang without a
-# full x86_64 sysroot.
+# 1. The /tmp problem. Starbound writes temp files to /tmp, which Android
+#    does not allow. A small LD_PRELOAD shim intercepts mkstemp, unlink and
+#    remove, and rewrites any /tmp path to a writable directory. It is
+#    compiled here for x86_64, because box64 loads it into the emulated
+#    process rather than the host one. The shim deliberately avoids libc
+#    headers - it declares the few functions it needs itself - so it builds
+#    with Termux's clang without an x86_64 sysroot.
+#
+# 2. Missing libraries. Starbound links against SDL2, and Termux has no
+#    glibc build of it. Neither libsamplerate, libdecor nor ICU 76 (which
+#    that SDL2 wants specifically) are packaged either. All four come from
+#    Debian's arm64 archive here.
+#
+#    This is easy to miss: on a machine where other things have already
+#    been installed, some of these are present as side effects and the game
+#    starts anyway. On a clean install it fails with a chain of "cannot
+#    open shared object file" errors, one library at a time.
 
 set -eu
 
 DEST="$HOME/games/starbound"
+WORK="$HOME/.cache/starbound-deps"
 INSTALLER="${1:-}"
+DEB="http://ftp.debian.org/debian/pool/main"
 
 if [ -z "$INSTALLER" ] || [ ! -f "$INSTALLER" ]; then
     cat << 'USAGE'
@@ -30,9 +42,51 @@ USAGE
     exit 1
 fi
 
-echo "==> Installing dependencies"
-pkg install -y glibc-runner box64-glibc unzip clang pulseaudio
-pkg install -y mesa-vulkan-icd-freedreno vulkan-loader
+echo "==> Installing packaged dependencies"
+pkg install -y glibc-runner box64-glibc unzip clang curl binutils pulseaudio
+pkg install -y mesa-glibc mesa-vulkan-icd-freedreno-glibc vulkan-icd-loader-glibc
+pkg install -y glu-glibc alsa-lib-glibc libpulse-glibc
+pkg install -y libx11-glibc libxext-glibc libxcursor-glibc libxi-glibc
+pkg install -y libxfixes-glibc libxrandr-glibc libxss-glibc
+pkg install -y libdrm-glibc libwayland-glibc libxkbcommon-glibc
+
+echo "==> Fetching the libraries Termux does not package"
+# SDL2, libsamplerate, libdecor and ICU 76 all come from Debian arm64.
+# The ICU version matters: this SDL2 links against 76 specifically, and
+# Termux packages 78, which will not satisfy it.
+mkdir -p "$WORK" && cd "$WORK"
+
+fetch_deb() {
+    local url="$1" name="${1##*/}"
+    echo "  $name"
+    [ -f "$name" ] || curl -fL "$url" -o "$name"
+    ar x "$name"
+    tar -xf data.tar.* 2>/dev/null || tar -xf data.tar.zst
+    rm -f control.tar.* data.tar.* debian-binary
+}
+
+fetch_deb "$DEB/libs/libsdl2/libsdl2-2.0-0_2.32.4+dfsg-1_arm64.deb"
+fetch_deb "$DEB/libs/libsamplerate/libsamplerate0_0.2.2-3_arm64.deb"
+fetch_deb "$DEB/libd/libdecor-0/libdecor-0-0_0.2.2-2_arm64.deb"
+fetch_deb "$DEB/i/icu/libicu76_76.1-4_arm64.deb"
+
+echo "==> Installing them into the glibc tree"
+cp -P "$WORK"/usr/lib/aarch64-linux-gnu/libSDL2-2.0.so.0* "$PREFIX/glibc/lib/"
+cp -P "$WORK"/usr/lib/aarch64-linux-gnu/libsamplerate.so.0* "$PREFIX/glibc/lib/"
+cp -P "$WORK"/usr/lib/aarch64-linux-gnu/libdecor-0.so.0* "$PREFIX/glibc/lib/"
+cp -P "$WORK"/usr/lib/aarch64-linux-gnu/libicu*.so.76* "$PREFIX/glibc/lib/"
+
+# The .deb files ship the real libraries; make sure the soname symlinks
+# point at them, since cp -P only preserves links that were in the archive.
+cd "$PREFIX/glibc/lib"
+for base in libSDL2-2.0.so.0 libsamplerate.so.0 libdecor-0.so.0; do
+    real=$(ls "$base".* 2>/dev/null | head -1)
+    [ -n "$real" ] && [ ! -e "$base" ] && ln -sf "$real" "$base"
+done
+for icu in libicudata libicui18n libicuio libicutest libicutu libicuuc; do
+    real=$(ls "$icu.so.76."* 2>/dev/null | head -1)
+    [ -n "$real" ] && [ ! -e "$icu.so.76" ] && ln -sf "$real" "$icu.so.76"
+done
 
 echo "==> Extracting the GOG installer"
 mkdir -p "$DEST/game"
@@ -126,10 +180,16 @@ box64 ./starbound"
 EOF
 chmod +x "$DEST/run.sh"
 
+echo "==> Cleaning up"
+rm -rf "$WORK"
+
 cat << 'EOF'
 
 Starbound installed to ~/games/starbound
 
 Start Termux:X11, then run:
   ~/games/starbound/run.sh
+
+Mods go in game/data/noarch/game/mods/ - .pak files are picked up
+directly, .zip and .rar archives are ignored and need extracting first.
 EOF
