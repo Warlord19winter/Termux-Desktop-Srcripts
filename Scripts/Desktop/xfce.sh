@@ -22,6 +22,16 @@ pkg install -y mesa mesa-vulkan-icd-freedreno vulkan-loader vulkan-tools
 echo "==> Installing audio"
 pkg install -y pulseaudio
 
+# The launchers here talk to PulseAudio over TCP on 127.0.0.1, which needs
+# module-native-protocol-tcp loaded. Termux does not load it by default,
+# and without it games start silently with no error - the connection just
+# fails quietly.
+mkdir -p "$HOME/.config/pulse"
+if ! grep -q "module-native-protocol-tcp" "$HOME/.config/pulse/default.pa" 2>/dev/null; then
+    printf '.include %s/etc/pulse/default.pa\nload-module module-native-protocol-tcp auth-ip-acl=127.0.0.1\n' "$PREFIX" \
+        >> "$HOME/.config/pulse/default.pa"
+fi
+
 echo "==> Writing ~/start-desktop.sh"
 cat > "$HOME/start-desktop.sh" << 'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
