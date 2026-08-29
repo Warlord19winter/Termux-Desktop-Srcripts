@@ -3,7 +3,7 @@
 # Desktop, Game, Code and 3d editing environment
 
 Install scripts for running a Linux desktop, emulators and games inside
-Termux on Android — no root, no proot.
+Termux on Android — no root, no proot, no chroot.
 
 Everything here was built and tested on a Snapdragon 8 Gen 3 device
 (Adreno 750) using the Turnip Vulkan driver. Other Adreno hardware should
