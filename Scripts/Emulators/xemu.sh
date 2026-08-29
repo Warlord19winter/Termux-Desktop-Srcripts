@@ -17,6 +17,9 @@ WORK="$HOME/.cache/xemu-install"
 
 echo "==> Installing dependencies"
 pkg install -y squashfs-tools-ng patchelf glibc-runner pulseaudio
+# Not bundled by the AppImage, and not pulled in by anything else on a
+# clean install.
+pkg install -y libgpg-error-glibc
 
 echo "==> Downloading xemu $VERSION"
 mkdir -p "$WORK" && cd "$WORK"
@@ -35,10 +38,16 @@ cp -r root/usr/* "$DEST"/
 patchelf --set-interpreter "$PREFIX/glibc/lib/ld-linux-aarch64.so.1" "$DEST/bin/xemu"
 
 echo "==> Fetching libusb from Debian"
-DEB="libusb-1.0-0_1.0.26-1_arm64.deb"
-curl -fL "http://ftp.debian.org/debian/pool/main/libu/libusb-1.0/$DEB" -o "$DEB"
-ar x "$DEB" && tar -xf data.tar.xz
-cp usr/lib/aarch64-linux-gnu/libusb-1.0.so.0.3.0 "$DEST/lib/libusb-1.0.so.0"
+# Termux packages neither of these, so they come from Debian arm64.
+for deb in \
+    "libu/libusb-1.0/libusb-1.0-0_1.0.26-1_arm64.deb" \
+    "libs/libsamplerate/libsamplerate0_0.2.2-3_arm64.deb"; do
+    name="${deb##*/}"
+    curl -fL "http://ftp.debian.org/debian/pool/main/$deb" -o "$name"
+    ar x "$name" && tar -xf data.tar.* && rm -f control.tar.* data.tar.* debian-binary
+done
+cp -P usr/lib/aarch64-linux-gnu/libusb-1.0.so.0* "$DEST/lib/"
+cp -P usr/lib/aarch64-linux-gnu/libsamplerate.so.0* "$PREFIX/glibc/lib/"
 
 echo "==> Writing launcher"
 cat > "$DEST/run.sh" << 'EOF'
