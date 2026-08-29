@@ -24,9 +24,12 @@
 #      usr/lib. Without the link, ImGui shader compilation fails and Vulkan
 #      falls back to "None".
 #
-#   4. Keep $PREFIX/glibc/lib OFF LD_LIBRARY_PATH. libc.so there is a linker
-#      script rather than an ELF, and the loader chokes on it
-#      ("bad ELF magic: 2f2a2047", which is the text "/* G").
+#   4. $PREFIX/glibc/lib goes on LD_LIBRARY_PATH *after* the AppImage's own
+#      lib directory, never before. libc.so there is a linker script rather
+#      than an ELF, and a loader that reaches it first chokes
+#      ("bad ELF magic: 2f2a2047", which is the text "/* G"). Appended, it
+#      is only consulted for libraries the AppImage does not bundle - which
+#      on a clean install is several of them.
 #
 # You need a real PS1 BIOS image - there is no HLE fallback.
 
@@ -38,6 +41,13 @@ DEST="$HOME/games/duckstation"
 echo "==> Installing dependencies"
 pkg install -y squashfs-tools-ng patchelf glibc-runner pulseaudio
 pkg install -y libsm-glibc libice-glibc
+# Qt needs these too. On a machine where other things have already been
+# installed they are usually present; on a clean one they are not, and
+# DuckStation fails with a chain of "cannot open shared object file".
+pkg install -y fontconfig-glibc harfbuzz-glibc freetype-glibc libpng-glibc
+pkg install -y libxi-glibc libxkbcommon-glibc libxcb-glibc libx11-glibc
+pkg install -y libxext-glibc libxrender-glibc libglvnd-glibc mesa-glibc
+pkg install -y libicu-glibc openssl-glibc zlib-glibc
 
 echo "==> Downloading DuckStation"
 mkdir -p "$DEST" && cd "$DEST"
@@ -79,7 +89,7 @@ export TU_DEBUG=noconform; \
 export SDL_AUDIODRIVER=pulseaudio; \
 export PULSE_SERVER=127.0.0.1; \
 export PULSE_LATENCY_MSEC=80; \
-export LD_LIBRARY_PATH=$D/usr/lib; \
+export LD_LIBRARY_PATH=$D/usr/lib:$G/lib; \
 export QT_QPA_PLATFORM=xcb; \
 export QT_QPA_PLATFORM_PLUGIN_PATH=$D/usr/lib/plugins/platforms; \
 export QT_PLUGIN_PATH=$D/usr/lib/plugins; \
